@@ -1,0 +1,48 @@
+.dashboard {
+  padding: 20px;
+}
+
+.dashboard-title {
+  margin-bottom: 20px;
+  font-size: 28px;
+}
+
+.card-container {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 20px;
+}
+
+.card {
+  padding: 25px;
+  border-radius: 12px;
+  color: white;
+  text-align: center;
+  font-size: 18px;
+  transition: 0.3s;
+}
+
+.card h2 {
+  font-size: 32px;
+  margin-bottom: 10px;
+}
+
+.card:hover {
+  transform: translateY(-5px);
+}
+
+.blue {
+  background: linear-gradient(135deg, #2196f3, #1976d2);
+}
+
+.green {
+  background: linear-gradient(135deg, #4caf50, #2e7d32);
+}
+
+.orange {
+  background: linear-gradient(135deg, #ff9800, #ef6c00);
+}
+
+.red {
+  background: linear-gradient(135deg, #f44336, #c62828);
+}

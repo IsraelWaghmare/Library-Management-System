@@ -1,305 +1,185 @@
-import React, { useEffect, useState, useCallback } from "react";
-import { getBorrows, issueBook, returnBook, getBooks, getMembers } from "../api";
-import Modal from "../components/Modal";
-import "./Page.css";
+import React, { useState } from 'react';
+
+const INIT_BORROWS = [
+  { id:1, book:'The Pragmatic Programmer', member:'Alice Johnson', issued:'2026-03-20', due:'2026-04-10', returned:false },
+  { id:2, book:'Atomic Habits',            member:'Carol White',   issued:'2026-03-25', due:'2026-04-15', returned:false },
+  { id:3, book:'Dune',                     member:'Alice Johnson', issued:'2026-03-01', due:'2026-03-21', returned:true  },
+  { id:4, book:'Sapiens',                  member:'Bob Smith',     issued:'2026-02-15', due:'2026-03-07', returned:true  },
+];
 
 const today = new Date();
-const defaultDue = new Date(today.getTime() + 14 * 86400000)
-  .toISOString()
-  .split("T")[0];
 
-const Borrows = () => {
-  const [borrows, setBorrows] = useState([]);
-  const [books, setBooks] = useState([]);
-  const [members, setMembers] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState("");
-  const [showModal, setShowModal] = useState(false);
-  const [form, setForm] = useState({
-    book_id: "",
-    member_id: "",
-    due_date: defaultDue,
+function isOverdue(due, returned) {
+  if (returned) return false;
+  return new Date(due) < today;
+}
+
+function daysLeft(due) {
+  const diff = Math.ceil((new Date(due) - today) / (1000*60*60*24));
+  return diff;
+}
+
+export default function Borrows() {
+  const [borrows, setBorrows] = useState(INIT_BORROWS);
+  const [filter, setFilter] = useState('all');
+  const [toast, setToast] = useState({ show:false, msg:'' });
+
+  function showToast(msg) {
+    setToast({ show:true, msg });
+    setTimeout(() => setToast(t=>({...t,show:false})), 3000);
+  }
+
+  function markReturned(id) {
+    setBorrows(bs => bs.map(b => b.id===id ? {...b, returned:true} : b));
+    showToast('Book marked as returned!');
+  }
+
+  const list = borrows.filter(b => {
+    if (filter === 'active')   return !b.returned;
+    if (filter === 'overdue')  return isOverdue(b.due, b.returned);
+    if (filter === 'returned') return b.returned;
+    return true;
   });
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState("");
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const res = await getBorrows(filter ? { status: filter } : {});
+  const active   = borrows.filter(b => !b.returned).length;
+  const overdue  = borrows.filter(b => isOverdue(b.due, b.returned)).length;
+  const returned = borrows.filter(b => b.returned).length;
 
-      // ✅ SAFE handling
-      const data = res?.data?.data || res?.data || [];
-      setBorrows(Array.isArray(data) ? data : []);
-    } catch {
-      setError("Failed to load borrows.");
-      setBorrows([]);
-    } finally {
-      setLoading(false);
-    }
-  }, [filter]);
-
-  useEffect(() => {
-    load();
-  }, [load]);
-
-  const openModal = async () => {
-    setError("");
-    setForm({ book_id: "", member_id: "", due_date: defaultDue });
-
-    try {
-      const [b, m] = await Promise.all([getBooks(), getMembers()]);
-
-      const booksData = b?.data?.data || b?.data || [];
-      const membersData = m?.data?.data || m?.data || [];
-
-      setBooks(
-        Array.isArray(booksData)
-          ? booksData.filter((bk) => bk.available_copies > 0)
-          : []
-      );
-
-      setMembers(
-        Array.isArray(membersData)
-          ? membersData.filter((mb) => mb.is_active)
-          : []
-      );
-    } catch {
-      setError("Could not load books/members.");
-    }
-
-    setShowModal(true);
-  };
-
-  const handleBorrow = async (e) => {
-    e.preventDefault();
-    setSubmitting(true);
-    setError("");
-
-    try {
-      await issueBook(form);
-      setShowModal(false);
-      load();
-    } catch (err) {
-      setError(err.response?.data?.error || "Could not issue book.");
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const handleReturn = async (id) => {
-    if (!window.confirm("Mark this book as returned?")) return;
-    try {
-      await returnBook(id);
-      load();
-    } catch (err) {
-      setError(err.response?.data?.error || "Return failed.");
-    }
-  };
-
-  // ✅ derive status (since backend doesn't send it)
-  const getStatus = (r) => {
-    if (r.return_date) return "returned";
-    if (new Date(r.due_date) < new Date()) return "overdue";
-    return "borrowed";
-  };
+  const filterStyle = (f) => ({
+    padding:'8px 18px', borderRadius:'var(--radius-sm)',
+    border: filter===f ? '1px solid rgba(240,165,0,0.3)' : '1px solid var(--border)',
+    background: filter===f ? 'var(--gold-glow)' : 'var(--surface)',
+    color: filter===f ? 'var(--gold)' : 'var(--text-muted)',
+    fontSize:'13px', fontWeight:500, cursor:'pointer',
+    transition:'all 0.18s', fontFamily:"'DM Sans',sans-serif",
+  });
 
   return (
     <div>
-      <div className="page-header">
-        <div>
-          <h1 className="page-title">Borrows</h1>
-          <p className="page-sub">
-            {borrows?.length || 0} records
-          </p>
-        </div>
-        <button className="btn btn--primary" onClick={openModal}>
-          + Issue Book
-        </button>
+      {/* Header */}
+      <div style={{ marginBottom:'36px' }}>
+        <h1 style={{ fontFamily:"'Playfair Display',serif", fontSize:'32px', fontWeight:700, color:'var(--text)' }}>Borrows</h1>
+        <p style={{ fontSize:'14px', color:'var(--text-muted)', marginTop:'6px' }}>Track issued and returned books</p>
       </div>
 
-      {error && (
-        <div className="alert alert--error">
-          {error} <button onClick={() => setError("")}>✕</button>
-        </div>
-      )}
-
-      <div className="toolbar">
-        {["", "borrowed", "returned", "overdue"].map((s) => (
-          <button
-            key={s}
-            className={`filter-btn ${
-              filter === s ? "filter-btn--active" : ""
-            }`}
-            onClick={() => setFilter(s)}
-          >
-            {s === "" ? "All" : s.charAt(0).toUpperCase() + s.slice(1)}
-          </button>
+      {/* Stats */}
+      <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:'16px', marginBottom:'28px' }}>
+        {[
+          { label:'Active Borrows', val:active,   accent:'#f0a500', icon:'↗' },
+          { label:'Overdue',        val:overdue,  accent:'#f07060', icon:'⚠' },
+          { label:'Returned',       val:returned, accent:'#5abf7e', icon:'✅' },
+        ].map(c => (
+          <div key={c.label} style={{
+            background:'var(--surface)', border:'1px solid var(--border)',
+            borderRadius:'var(--radius)', padding:'20px 22px',
+            borderTop:`3px solid ${c.accent}`,
+          }}>
+            <span style={{ fontSize:'20px', display:'block', marginBottom:'10px' }}>{c.icon}</span>
+            <div style={{ fontFamily:"'Playfair Display',serif", fontSize:'32px', fontWeight:700, color:'var(--text)', lineHeight:1 }}>{c.val}</div>
+            <div style={{ fontSize:'12px', color:'var(--text-muted)', marginTop:'4px' }}>{c.label}</div>
+          </div>
         ))}
       </div>
 
-      {loading ? (
-        <div className="loading">Loading...</div>
-      ) : (
-        <div className="table-wrap">
-          <table className="table">
-            <thead>
-              <tr>
-                <th>#</th>
-                <th>Book</th>
-                <th>Member</th>
-                <th>Borrowed</th>
-                <th>Due Date</th>
-                <th>Returned</th>
-                <th>Status</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
+      {/* Filters */}
+      <div style={{ display:'flex', gap:'8px', marginBottom:'20px' }}>
+        {[['all','All'],['active','Active'],['overdue','Overdue'],['returned','Returned']].map(([f,l]) => (
+          <button key={f} style={filterStyle(f)} onClick={() => setFilter(f)}>{l}</button>
+        ))}
+      </div>
 
-            <tbody>
-              {borrows.length === 0 ? (
-                <tr>
-                  <td colSpan={8} className="empty-row">
-                    No records found.
-                  </td>
-                </tr>
-              ) : (
-                borrows.map((r, i) => {
-                  const status = getStatus(r);
+      {/* Cards */}
+      <div style={{ display:'flex', flexDirection:'column', gap:'10px' }}>
+        {list.length === 0 && (
+          <div style={{ textAlign:'center', padding:'48px', color:'var(--text-faint)', fontSize:'15px',
+            background:'var(--surface)', border:'1px solid var(--border)', borderRadius:'var(--radius)' }}>
+            No records found
+          </div>
+        )}
+        {list.map(b => {
+          const overdue = isOverdue(b.due, b.returned);
+          const days = daysLeft(b.due);
+          return (
+            <div key={b.id} style={{
+              background:'var(--surface)', border:`1px solid ${overdue ? 'rgba(240,112,96,0.25)' : 'var(--border)'}`,
+              borderRadius:'var(--radius)', padding:'20px 22px',
+              display:'flex', alignItems:'center', gap:'20px',
+              transition:'transform 0.18s',
+            }}
+              onMouseEnter={e=>e.currentTarget.style.transform='translateX(3px)'}
+              onMouseLeave={e=>e.currentTarget.style.transform=''}
+            >
+              {/* Status indicator */}
+              <div style={{
+                width:'42px', height:'42px', borderRadius:'10px', flexShrink:0,
+                display:'flex', alignItems:'center', justifyContent:'center', fontSize:'18px',
+                background: b.returned ? 'rgba(90,191,126,0.12)' : overdue ? 'rgba(240,112,96,0.12)' : 'rgba(240,165,0,0.12)',
+                border: `1px solid ${b.returned ? 'rgba(90,191,126,0.2)' : overdue ? 'rgba(240,112,96,0.2)' : 'rgba(240,165,0,0.2)'}`,
+              }}>
+                {b.returned ? '✅' : overdue ? '⚠' : '📖'}
+              </div>
 
-                  return (
-                    <tr key={r.id}>
-                      <td className="muted">{i + 1}</td>
+              {/* Info */}
+              <div style={{ flex:1 }}>
+                <div style={{ fontWeight:600, color:'var(--text)', fontSize:'15px', marginBottom:'4px' }}>{b.book}</div>
+                <div style={{ fontSize:'13px', color:'var(--text-muted)' }}>
+                  👤 {b.member} &nbsp;·&nbsp; Issued: {new Date(b.issued).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}
+                </div>
+              </div>
 
-                      <td>
-                        <strong>{r.title}</strong>
-                      </td>
+              {/* Due / status */}
+              <div style={{ textAlign:'right', flexShrink:0 }}>
+                <div style={{ fontSize:'12px', color:'var(--text-faint)', marginBottom:'4px' }}>Due Date</div>
+                <div style={{
+                  fontSize:'14px', fontWeight:600,
+                  color: b.returned ? 'var(--green)' : overdue ? 'var(--coral)' : 'var(--text)',
+                }}>
+                  {new Date(b.due).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}
+                </div>
+                {!b.returned && (
+                  <div style={{ fontSize:'11px', color: overdue ? 'var(--coral)' : 'var(--text-faint)', marginTop:'2px' }}>
+                    {overdue ? `${Math.abs(days)}d overdue` : `${days}d left`}
+                  </div>
+                )}
+              </div>
 
-                      <td>{r.name}</td>
-
-                      <td className="muted">
-                        {new Date(r.issue_date).toLocaleDateString("en-IN")}
-                      </td>
-
-                      <td>
-                        {new Date(r.due_date).toLocaleDateString("en-IN")}
-                      </td>
-
-                      <td className="muted">
-                        {r.return_date
-                          ? new Date(r.return_date).toLocaleDateString("en-IN")
-                          : "—"}
-                      </td>
-
-                      <td>
-                        <span
-                          className={`badge ${
-                            status === "returned"
-                              ? "badge--green"
-                              : status === "overdue"
-                              ? "badge--red"
-                              : "badge--blue"
-                          }`}
-                        >
-                          {status}
-                        </span>
-                      </td>
-
-                      <td>
-                        {status === "borrowed" && (
-                          <button
-                            className="btn btn--sm btn--primary"
-                            onClick={() => handleReturn(r.id)}
-                          >
-                            Return
-                          </button>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
-      )}
-
-      {showModal && (
-        <Modal title="Issue a Book" onClose={() => setShowModal(false)}>
-          <form onSubmit={handleBorrow} className="modal-form">
-            {error && <div className="alert alert--error">{error}</div>}
-
-            <div className="form-group">
-              <label>Select Book *</label>
-              <select
-                required
-                value={form.book_id}
-                onChange={(e) =>
-                  setForm({ ...form, book_id: e.target.value })
-                }
-              >
-                <option value="">-- Select Book --</option>
-                {books.map((b) => (
-                  <option key={b.id} value={b.id}>
-                    {b.title} ({b.available_copies} left)
-                  </option>
-                ))}
-              </select>
+              {/* Badge & action */}
+              <div style={{ flexShrink:0, display:'flex', flexDirection:'column', alignItems:'flex-end', gap:'8px' }}>
+                <span style={{
+                  fontSize:'11px', padding:'4px 10px', borderRadius:'20px', fontWeight:500,
+                  background: b.returned ? 'rgba(90,191,126,0.12)' : overdue ? 'rgba(240,112,96,0.12)' : 'rgba(240,165,0,0.12)',
+                  color: b.returned ? 'var(--green)' : overdue ? 'var(--coral)' : 'var(--amber)',
+                  border: `1px solid ${b.returned ? 'rgba(90,191,126,0.2)' : overdue ? 'rgba(240,112,96,0.2)' : 'rgba(240,165,0,0.2)'}`,
+                }}>
+                  {b.returned ? 'Returned' : overdue ? 'Overdue' : 'Active'}
+                </span>
+                {!b.returned && (
+                  <button onClick={() => markReturned(b.id)} style={{
+                    padding:'6px 12px', borderRadius:'var(--radius-sm)', fontSize:'12px', fontWeight:500,
+                    background:'rgba(90,191,126,0.12)', color:'var(--green)',
+                    border:'1px solid rgba(90,191,126,0.2)', cursor:'pointer',
+                    transition:'all 0.15s', fontFamily:"'DM Sans',sans-serif",
+                  }}
+                    onMouseEnter={e=>e.currentTarget.style.background='rgba(90,191,126,0.22)'}
+                    onMouseLeave={e=>e.currentTarget.style.background='rgba(90,191,126,0.12)'}
+                  >↩ Return</button>
+                )}
+              </div>
             </div>
+          );
+        })}
+      </div>
 
-            <div className="form-group">
-              <label>Select Member *</label>
-              <select
-                required
-                value={form.member_id}
-                onChange={(e) =>
-                  setForm({ ...form, member_id: e.target.value })
-                }
-              >
-                <option value="">-- Select Member --</option>
-                {members.map((m) => (
-                  <option key={m.id} value={m.id}>
-                    {m.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className="form-group">
-              <label>Due Date *</label>
-              <input
-                required
-                type="date"
-                value={form.due_date}
-                min={new Date().toISOString().split("T")[0]}
-                onChange={(e) =>
-                  setForm({ ...form, due_date: e.target.value })
-                }
-              />
-            </div>
-
-            <div className="modal-actions">
-              <button
-                type="button"
-                className="btn btn--outline"
-                onClick={() => setShowModal(false)}
-              >
-                Cancel
-              </button>
-
-              <button
-                type="submit"
-                className="btn btn--primary"
-                disabled={submitting}
-              >
-                {submitting ? "Issuing..." : "Issue Book"}
-              </button>
-            </div>
-          </form>
-        </Modal>
-      )}
+      {/* Toast */}
+      <div style={{
+        position:'fixed', bottom:'24px', right:'24px',
+        background:'var(--surface)', border:'1px solid rgba(90,191,126,0.3)',
+        borderLeft:'3px solid #5abf7e', borderRadius:'10px',
+        padding:'14px 20px', fontSize:'14px', color:'var(--text)', zIndex:9999,
+        opacity: toast.show ? 1 : 0, transform: toast.show ? 'translateY(0)' : 'translateY(12px)',
+        transition:'all 0.3s ease', display:'flex', alignItems:'center', gap:'10px',
+        boxShadow:'0 8px 32px rgba(0,0,0,0.4)', pointerEvents:'none',
+      }}>✅ {toast.msg}</div>
     </div>
   );
-};
-
-export default Borrows;
+}

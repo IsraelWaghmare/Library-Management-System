@@ -1,0 +1,92 @@
+Nice, glad it’s working 👍
+Here’s a **very short SOP** you can reuse anytime:
+
+---
+
+# ⚙️ SOP: Create & Run a systemd Service
+
+## 1. Create service file
+
+```bash
+sudo nano /etc/systemd/system/<service-name>.service
+```
+
+---
+
+## 2. Add config
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/home/mansi/Documents/Projects/Library-Management-System/Library-Management-System/backend
+
+ExecStart=/root/.nvm/versions/node/v20.20.2/bin/npm run dev
+Environment=PATH=/root/.nvm/versions/node/v20.20.2/bin:/usr/bin:/bin
+
+Restart=always
+Environment=NODE_ENV=development
+
+ 
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/home/mansi/Documents/Projects/Library-Management-System/Library-Management-System/frontend
+
+# Use NVM node + npm
+ExecStart=/root/.nvm/versions/node/v20.20.2/bin/npm start
+
+# Set PATH explicitly
+Environment=PATH=/root/.nvm/versions/node/v20.20.2/bin:/usr/bin:/bin
+
+Restart=always
+
+
+---
+
+## 3. Reload systemd
+
+```bash
+sudo systemctl daemon-reexec
+sudo systemctl daemon-reload
+```
+
+---
+
+## 4. Start service
+
+```bash
+sudo systemctl start <service-name>
+```
+
+---
+
+## 5. Enable on boot (optional)
+
+```bash
+sudo systemctl enable <service-name>
+```
+
+---
+
+## 6. Check status
+
+```bash
+systemctl status <service-name>
+```
+
+---
+
+## 7. View logs
+
+```bash
+journalctl -u <service-name> -f
+```
+
+---
+
+## 8. Restart / Stop
+
+```bash
+sudo systemctl restart <service-name>
+sudo systemctl stop <service-name>
+
